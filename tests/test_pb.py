@@ -20,10 +20,26 @@ def client():
 
 
 def test_auth_with_password(client):
-    client.auth_with_password(pb_id, pb_pw)
-
     with pytest.raises(ResponseError):
         client.auth_with_password(pb_id, "123")
+
+    assert client.authenticated is False
+
+    client.auth_with_password(pb_id, pb_pw)
+    assert client.authenticated is True
+
+
+def test_auth_as_admin(client):
+    email = os.getenv("PB_ADMIN_EMAIL")
+    pw = os.getenv("PB_ADMIN_PW")
+
+    with pytest.raises(ResponseError):
+        client.auth_as_admin(email, "123")
+
+    assert client.authenticated is False
+
+    client.auth_as_admin(email, pw)
+    assert client.authenticated is True
 
 
 def test_get(client):

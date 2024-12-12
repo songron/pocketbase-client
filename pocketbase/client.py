@@ -27,9 +27,10 @@ class Client:
             self.collection_map[id_or_name] = Collection(id_or_name, self)
         return self.collection_map[id_or_name]
 
-    def auth_with_password(self, username_or_email: str, password: str):
+    def _auth_with_password(self, username_or_email: str, password: str, is_admin: bool = False):
+        coll_name = "_superusers" if is_admin else "users"
         user = self.request(
-            "/api/collections/users/auth-with-password",
+            f"/api/collections/{coll_name}/auth-with-password",
             method="POST",
             request_json=dict(
                 identity=username_or_email,
@@ -42,6 +43,12 @@ class Client:
 
         self.http_client.headers.update({"Authorization": token})
         self.authenticated = True
+
+    def auth_with_password(self, username_or_email: str, password: str):
+        self._auth_with_password(username_or_email, password, is_admin=False)
+
+    def auth_as_admin(self, email: str, password: str):
+        self._auth_with_password(email, password, is_admin=True)
 
     def request(
             self,
