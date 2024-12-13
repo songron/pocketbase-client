@@ -99,15 +99,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jvalue"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/10/30/102c8d0b2cb3e7f36584001d548e31db5c6ef8c74368796ea99c4e3b7577/jvalue-0.1.0.tar.gz", hash = "sha256:ac790a85daa72a443e12aa9901e2a364bbc291e2f4560c137bde013fe9ee58ac", size = 5542 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/4e/1b25b2fb804a86753daf6c8997ab0aacfc31b02490afefe63e07b0687f38/jvalue-0.1.0-py3-none-any.whl", hash = "sha256:0022701a8b9e033ed5253adeb3d031eab76f44d840a73b175b0f8c4682009d91", size = 2875 },
-]
-
-[[package]]
 name = "packaging"
 version = "24.2"
 source = { registry = "https://pypi.org/simple" }
@@ -131,7 +122,6 @@ version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "jvalue" },
 ]
 
 [package.dev-dependencies]
@@ -141,10 +131,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "jvalue", specifier = ">=0.1.0" },
-]
+requires-dist = [{ name = "httpx", specifier = ">=0.28.1" }]
 
 [package.metadata.requires-dev]
 dev = [
