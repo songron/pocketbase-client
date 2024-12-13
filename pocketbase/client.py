@@ -15,7 +15,6 @@ class Method:
 
 
 class Client:
-
     def __init__(self, endpoint: str):
         self.endpoint = endpoint
         self.authenticated = False
@@ -27,7 +26,9 @@ class Client:
             self.collection_map[id_or_name] = Collection(id_or_name, self)
         return self.collection_map[id_or_name]
 
-    def _auth_with_password(self, username_or_email: str, password: str, is_admin: bool = False):
+    def _auth_with_password(
+        self, username_or_email: str, password: str, is_admin: bool = False
+    ):
         coll_name = "_superusers" if is_admin else "users"
         user = self.request(
             f"/api/collections/{coll_name}/auth-with-password",
@@ -51,11 +52,11 @@ class Client:
         self._auth_with_password(email, password, is_admin=True)
 
     def request(
-            self,
-            path: str,
-            method: str = "GET",
-            request_params: dict | None = None,
-            request_json: dict | None = None,
+        self,
+        path: str,
+        method: str = "GET",
+        request_params: dict | None = None,
+        request_json: dict | None = None,
     ) -> dict:
         resp = self.http_client.request(
             method,
@@ -79,5 +80,6 @@ class Client:
             raise error_class(
                 message=resp_json.get("message", ""),
                 status_code=resp.status_code,
+                details=resp_json,
             )
         return resp_json

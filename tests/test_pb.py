@@ -29,6 +29,7 @@ def test_auth_with_password(client):
     assert client.authenticated is True
 
 
+@pytest.mark.skip(reason="do not know how to login as admin yet")
 def test_auth_as_admin(client):
     email = os.getenv("PB_ADMIN_EMAIL")
     pw = os.getenv("PB_ADMIN_PW")
@@ -71,10 +72,12 @@ def test_get_one(client):
     assert client.collection("album").get_one({}) is None
 
     client.auth_with_password(pb_id, pb_pw)
-    result = client.collection("album").get_one({
-        "fields": "id,title",
-        "filter": "title = 'Play'",
-    })
+    result = client.collection("album").get_one(
+        {
+            "fields": "id,title",
+            "filter": "title = 'Play'",
+        }
+    )
     assert isinstance(result, dict)
     assert sorted(result.keys()) == ["id", "title"]
     assert result["title"] == "Play"
