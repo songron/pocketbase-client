@@ -2,7 +2,6 @@ from json import JSONDecodeError
 from urllib.parse import urljoin
 
 import httpx
-from jvalue import json_extract
 
 from .collection import Collection
 from .errors import ResponseError, NotFound, ValidationNotUnique
@@ -12,6 +11,16 @@ class Method:
     GET = "GET"
     POST = "POST"
     PATCH = "PATCH"
+
+
+def validation_not_unique(resp_json: dict) -> bool:
+    data = resp_json.get("data")
+    if not isinstance(data, dict):
+        return False
+    for _, v in data.items():
+        if isinstance(v, dict) and v.get("code") == "validation_not_unique":
+            return True
+    return False
 
 
 class Client:
@@ -73,7 +82,7 @@ class Client:
         if not resp.is_success:
             if resp.status_code == 404:
                 error_class = NotFound
-            elif json_extract(resp_json, "data.title.code") == "validation_not_unique":
+            elif validation_not_unique(resp_json):
                 error_class = ValidationNotUnique
             else:
                 error_class = ResponseError
