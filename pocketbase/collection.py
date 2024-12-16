@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 
 class Collection:
-
     def __init__(self, id_or_name: str, client: "Client"):
         self.id_or_name = id_or_name
         self.client = client
@@ -22,12 +21,14 @@ class Collection:
         )
 
     def get_one(self, request_params: dict) -> dict | None:
-        request_params.update({"page": 1, "perPage": 1})
+        request_params.update({"page": 1, "perPage": 1, "skipTotal": 1})
         data = self.get_many(request_params)
         items = data.get("items") or [None]
         return items[0]
 
     def get_many(self, request_params: dict) -> dict:
+        if "skipTotal" not in request_params:
+            request_params["skipTotal"] = 1
         return self.client.request(
             self.base_path,
             method="GET",

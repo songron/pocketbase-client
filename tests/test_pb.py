@@ -60,10 +60,14 @@ def test_get(client):
 def test_get_many(client):
     result = client.collection("album").get_many({})
     assert not result.get("items")
-    assert result["totalItems"] == 0
+    assert result["totalItems"] == -1
 
     client.auth_with_password(pb_id, pb_pw)
     result = client.collection("album").get_many({})
+    assert result.get("items")
+    assert result["totalItems"] == -1
+
+    result = client.collection("album").get_many({"skipTotal": 0})
     assert result.get("items")
     assert result["totalItems"] > 0
 
