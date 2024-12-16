@@ -35,6 +35,10 @@ class Collection:
             request_params=request_params,
         )
 
+    def get_items(self, request_params: dict) -> list:
+        resp = self.get_many(request_params)
+        return resp["items"]
+
     def create(self, request_json: dict) -> dict:
         return self.client.request(
             self.base_path,

@@ -72,6 +72,16 @@ def test_get_many(client):
     assert result["totalItems"] > 0
 
 
+def test_get_items(client):
+    result = client.collection("album").get_items({})
+    assert result == []
+
+    client.auth_with_password(pb_id, pb_pw)
+    result = client.collection("album").get_items({})
+    assert isinstance(result, list)
+    assert len(result) > 0
+
+
 def test_get_one(client):
     assert client.collection("album").get_one({}) is None
 
