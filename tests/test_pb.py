@@ -1,6 +1,7 @@
 import os
 import random
 
+import httpx
 import pytest
 from dotenv import load_dotenv
 
@@ -9,14 +10,29 @@ from pocketbase.errors import ResponseError, ValidationNotUnique, NotFound
 
 load_dotenv()
 
-pb_endpoint = os.getenv("PB_ENDPOINT")
-pb_id = os.getenv("PB_ID")
-pb_pw = os.getenv("PB_PW")
+pb_endpoint = os.getenv("PB_ENDPOINT", "")
+pb_id = os.getenv("PB_ID", "")
+pb_pw = os.getenv("PB_PW", "")
 
 
 @pytest.fixture()
 def client():
     yield Client(pb_endpoint)
+
+
+@pytest.fixture()
+def client_timeout():
+    yield Client(pb_endpoint, timeout=0.001)
+
+
+def test_timeout(client_timeout):
+    client = client_timeout
+
+    with pytest.raises(httpx.ConnectTimeout):
+        client.auth_with_password(pb_id, pb_pw)
+
+    with pytest.raises(httpx.ConnectTimeout):
+        client.collection("artist").get_many({})
 
 
 def test_auth_with_password(client):

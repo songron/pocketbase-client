@@ -24,8 +24,9 @@ def validation_not_unique(resp_json: dict) -> bool:
 
 
 class Client:
-    def __init__(self, endpoint: str):
+    def __init__(self, endpoint: str, timeout: float = 10.0):
         self.endpoint = endpoint
+        self.timeout = timeout
         self.authenticated = False
         self.http_client = httpx.Client()
         self.collection_map: dict[str, Collection] = {}
@@ -72,6 +73,7 @@ class Client:
             urljoin(self.endpoint, path),
             params=request_params,
             json=request_json,
+            timeout=self.timeout,
         )
 
         try:
