@@ -10,6 +10,7 @@ from pocketbase.errors import NotFound
 ENDPOINT = "https://pocketbase.io/"
 EMAIL = "test@example.com"
 PASSWORD = "123456"
+PB_URI = f"{ENDPOINT}?auth=_superusers:{EMAIL}:{PASSWORD}"
 
 logging.getLogger("httpx").setLevel(logging.INFO)
 
@@ -37,6 +38,16 @@ def test_not_authenticated():
     assert coll.get_one({}) is None
 
     assert len(coll.get_items({})) == 0
+
+
+def test_auth_uri():
+    client = Client(endpoint=ENDPOINT)
+    assert client.authenticated is False
+    assert client.auth_expired is True
+
+    client = Client(endpoint=PB_URI)
+    assert client.authenticated is True
+    assert client.auth_expired is False
 
 
 def test_timeout(client):

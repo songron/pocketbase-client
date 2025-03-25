@@ -1,12 +1,14 @@
 import json
+import re
 import time
-from json import JSONDecodeError
+from urllib.parse import urlparse, parse_qs
 
 import httpx
 
 from .collection import Collection
 from .errors import ResponseError, NotFound, ValidationNotUnique
 
+DEFAULT_TIMEOUT = 10.0
 DEFAULT_AUTH_DURATION = 86400.0
 
 
@@ -26,13 +28,40 @@ def validation_not_unique(resp_json: dict) -> bool:
     return False
 
 
+def extract_url_param(key: str, params: dict) -> str | None:
+    v = params.get(key)
+    return v[0] if isinstance(v, list) and v else None
+
+
 class Client:
-    def __init__(self, endpoint: str, timeout: float = 10.0):
-        self.http_client = httpx.Client(
-            base_url=endpoint, timeout=timeout, follow_redirects=True
-        )
+    def __init__(
+        self,
+        endpoint: str,
+        timeout: float = DEFAULT_TIMEOUT,
+        auth_duration: float = DEFAULT_AUTH_DURATION,
+    ):
         self.collection_map: dict[str, Collection] = {}
         self.auth_data = {}
+
+        up = urlparse(endpoint)
+        auth_str = (parse_qs(up.query).get("auth") or [""])[0]
+        m = re.search(r"^(?P<coll>.+):(?P<email>.+):(?P<password>.+)$", auth_str)
+        if m is None:
+            self.http_client = httpx.Client(
+                base_url=endpoint, timeout=timeout, follow_redirects=True
+            )
+        else:
+            self.http_client = httpx.Client(
+                base_url=f"{up.scheme}://{up.netloc}",
+                timeout=timeout,
+                follow_redirects=True,
+            )
+            self.auth_with_password(
+                username_or_email=m.group("email"),
+                password=m.group("password"),
+                coll_name=m.group("coll"),
+                auth_duration=auth_duration,
+            )
 
     def _update_auth(self, auth_data: dict, auth_duration: float):
         token = auth_data.get("token")
@@ -110,7 +139,7 @@ class Client:
 
         try:
             resp_json = resp.json()
-        except JSONDecodeError:
+        except json.JSONDecodeError:
             resp_json = {}
 
         if not resp.is_success:
