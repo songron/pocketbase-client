@@ -1,3 +1,4 @@
+import logging
 import random
 
 import httpx
@@ -6,9 +7,11 @@ import pytest
 from pocketbase import Client
 from pocketbase.errors import NotFound
 
-ENDPOINT = "https://pocketbase.io/demo/"
+ENDPOINT = "https://pocketbase.io/"
 EMAIL = "test@example.com"
 PASSWORD = "123456"
+
+logging.getLogger("httpx").setLevel(logging.INFO)
 
 
 @pytest.fixture()
@@ -37,10 +40,7 @@ def test_not_authenticated():
 
 
 def test_timeout(client):
-    items = client.collection("messages").get_items({})
-    assert len(items) > 0
-
-    client.timeout = 0.01
+    client = Client(ENDPOINT, timeout=0.01)
     with pytest.raises(httpx.TimeoutException):
         client.collection("messages").get_many({})
 

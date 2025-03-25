@@ -2,7 +2,6 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from json import JSONDecodeError
-from urllib.parse import urljoin
 
 import httpx
 
@@ -36,9 +35,9 @@ class User:
 
 class Client:
     def __init__(self, endpoint: str, timeout: float = 10.0):
-        self.endpoint = endpoint
-        self.timeout = timeout
-        self.http_client = httpx.Client()
+        self.http_client = httpx.Client(
+            base_url=endpoint, timeout=timeout, follow_redirects=True
+        )
         self.collection_map: dict[str, Collection] = {}
         self.user = None
 
@@ -108,10 +107,9 @@ class Client:
     ) -> dict:
         resp = self.http_client.request(
             method,
-            urljoin(self.endpoint, path),
+            url=path,
             params=request_params,
             json=request_json,
-            timeout=self.timeout,
         )
 
         try:
