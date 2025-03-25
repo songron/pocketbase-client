@@ -1,12 +1,13 @@
 import json
-from dataclasses import dataclass
-from datetime import UTC, datetime
+import time
 from json import JSONDecodeError
 
 import httpx
 
 from .collection import Collection
 from .errors import ResponseError, NotFound, ValidationNotUnique
+
+DEFAULT_AUTH_DURATION = 86400.0
 
 
 class Method:
@@ -25,51 +26,52 @@ def validation_not_unique(resp_json: dict) -> bool:
     return False
 
 
-@dataclass
-class User:
-    coll_name: str
-    user_id: str
-    token: str
-    refreshed_at: str
-
-
 class Client:
     def __init__(self, endpoint: str, timeout: float = 10.0):
         self.http_client = httpx.Client(
             base_url=endpoint, timeout=timeout, follow_redirects=True
         )
         self.collection_map: dict[str, Collection] = {}
-        self.user = None
+        self.auth_data = {}
+
+    def _update_auth(self, auth_data: dict, auth_duration: float):
+        token = auth_data.get("token")
+        if not token:
+            raise ValueError("Invalid authentication")
+
+        self.http_client.headers.update({"Authorization": token})
+
+        auth_data["refreshed_at"] = time.time() - 60.0
+        auth_data["auth_duration"] = auth_duration
+        self.auth_data = auth_data
 
     @property
     def authenticated(self) -> bool:
-        return self.user is not None
+        return bool(self.auth_data.get("token"))
 
     @property
-    def refreshed_at(self) -> str:
-        return self.user.refreshed_at if self.user else ""
+    def refreshed_at(self) -> float:
+        return self.auth_data.get("refreshed_at", 0.0)
+
+    @property
+    def auth_duration(self) -> float:
+        return self.auth_data.get("auth_duration", DEFAULT_AUTH_DURATION)
+
+    @property
+    def auth_expired(self) -> bool:
+        return time.time() - self.refreshed_at >= self.auth_duration
 
     def collection(self, id_or_name: str) -> Collection:
         if id_or_name not in self.collection_map:
             self.collection_map[id_or_name] = Collection(id_or_name, self)
         return self.collection_map[id_or_name]
 
-    def _update_user(self, coll_name: str, auth_data: dict):
-        user_id = auth_data.get("record", {}).get("id")
-        token = auth_data.get("token")
-        if not user_id or not token:
-            raise ValueError("Invalid authentication")
-
-        self.http_client.headers.update({"Authorization": token})
-        self.user = User(
-            coll_name=coll_name,
-            user_id=user_id,
-            token=token,
-            refreshed_at=datetime.now(UTC).isoformat(),
-        )
-
-    def _auth_with_password(
-        self, username_or_email: str, password: str, coll_name: str
+    def auth_with_password(
+        self,
+        username_or_email: str,
+        password: str,
+        coll_name: str = "users",
+        auth_duration: float = DEFAULT_AUTH_DURATION,
     ):
         auth_data = self.request(
             f"/api/collections/{coll_name}/auth-with-password",
@@ -79,24 +81,18 @@ class Client:
                 password=password,
             ),
         )
-        self._update_user(coll_name, auth_data)
+        self._update_auth(auth_data, auth_duration)
 
-    def auth_with_password(
-        self, username_or_email: str, password: str, coll_name: str = "users"
-    ):
-        self._auth_with_password(username_or_email, password, coll_name)
-
-    def auth_refresh(self) -> bool:
-        if self.user is None:
+    def auth_refresh(self):
+        if not self.authenticated:
             raise ValueError("Not authenticated")
-        assert isinstance(self.user, User), "Invalid user object"
 
+        coll_name = self.auth_data.get("record", {}).get("collectionName", "users")
         auth_data = self.request(
-            f"/api/collections/{self.user.coll_name}/auth-refresh",
+            f"/api/collections/{coll_name}/auth-refresh",
             method="POST",
         )
-        self._update_user(self.user.coll_name, auth_data)
-        return True
+        self._update_auth(auth_data, self.auth_duration)
 
     def request(
         self,

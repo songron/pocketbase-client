@@ -45,6 +45,17 @@ def test_timeout(client):
         client.collection("messages").get_many({})
 
 
+def test_auth_expired(client):
+    assert client.authenticated is True
+    assert client.refreshed_at > 0.0
+    assert client.auth_expired is False
+
+    client.auth_with_password(
+        EMAIL, PASSWORD, coll_name="_superusers", auth_duration=59.0
+    )
+    assert client.auth_expired is True
+
+
 def test_auth_refresh(client):
     refreshed_at = client.refreshed_at
 
