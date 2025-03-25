@@ -1,3 +1,6 @@
+import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from json import JSONDecodeError
 from urllib.parse import urljoin
 
@@ -23,24 +26,53 @@ def validation_not_unique(resp_json: dict) -> bool:
     return False
 
 
+@dataclass
+class User:
+    coll_name: str
+    user_id: str
+    token: str
+    refreshed_at: str
+
+
 class Client:
     def __init__(self, endpoint: str, timeout: float = 10.0):
         self.endpoint = endpoint
         self.timeout = timeout
-        self.authenticated = False
         self.http_client = httpx.Client()
         self.collection_map: dict[str, Collection] = {}
+        self.user = None
+
+    @property
+    def authenticated(self) -> bool:
+        return self.user is not None
+
+    @property
+    def refreshed_at(self) -> str:
+        return self.user.refreshed_at if self.user else ""
 
     def collection(self, id_or_name: str) -> Collection:
         if id_or_name not in self.collection_map:
             self.collection_map[id_or_name] = Collection(id_or_name, self)
         return self.collection_map[id_or_name]
 
+    def _update_user(self, coll_name: str, auth_data: dict):
+        user_id = auth_data.get("record", {}).get("id")
+        token = auth_data.get("token")
+        if not user_id or not token:
+            raise ValueError("Invalid authentication")
+
+        self.http_client.headers.update({"Authorization": token})
+        self.user = User(
+            coll_name=coll_name,
+            user_id=user_id,
+            token=token,
+            refreshed_at=datetime.now(UTC).isoformat(),
+        )
+
     def _auth_with_password(
-        self, username_or_email: str, password: str, is_admin: bool = False
+        self, username_or_email: str, password: str, coll_name: str
     ):
-        coll_name = "_superusers" if is_admin else "users"
-        user = self.request(
+        auth_data = self.request(
             f"/api/collections/{coll_name}/auth-with-password",
             method="POST",
             request_json=dict(
@@ -48,18 +80,24 @@ class Client:
                 password=password,
             ),
         )
-        token = user.get("token")
-        if not token:
-            raise ValueError("Token not found from authentication result")
+        self._update_user(coll_name, auth_data)
 
-        self.http_client.headers.update({"Authorization": token})
-        self.authenticated = True
+    def auth_with_password(
+        self, username_or_email: str, password: str, coll_name: str = "users"
+    ):
+        self._auth_with_password(username_or_email, password, coll_name)
 
-    def auth_with_password(self, username_or_email: str, password: str):
-        self._auth_with_password(username_or_email, password, is_admin=False)
+    def auth_refresh(self) -> bool:
+        if self.user is None:
+            raise ValueError("Not authenticated")
+        assert isinstance(self.user, User), "Invalid user object"
 
-    def auth_as_admin(self, email: str, password: str):
-        self._auth_with_password(email, password, is_admin=True)
+        auth_data = self.request(
+            f"/api/collections/{self.user.coll_name}/auth-refresh",
+            method="POST",
+        )
+        self._update_user(self.user.coll_name, auth_data)
+        return True
 
     def request(
         self,
@@ -89,8 +127,7 @@ class Client:
             else:
                 error_class = ResponseError
             raise error_class(
-                message=resp_json.get("message", ""),
+                message=json.dumps(resp_json),
                 status_code=resp.status_code,
-                details=resp_json,
             )
         return resp_json

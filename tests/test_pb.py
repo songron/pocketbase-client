@@ -1,157 +1,114 @@
-import os
 import random
 
 import httpx
 import pytest
-from dotenv import load_dotenv
 
 from pocketbase import Client
-from pocketbase.errors import ResponseError, ValidationNotUnique, NotFound
+from pocketbase.errors import NotFound
 
-load_dotenv()
-
-pb_endpoint = os.getenv("PB_ENDPOINT", "")
-pb_id = os.getenv("PB_ID", "")
-pb_pw = os.getenv("PB_PW", "")
+ENDPOINT = "https://pocketbase.io/demo/"
+EMAIL = "test@example.com"
+PASSWORD = "123456"
 
 
 @pytest.fixture()
 def client():
-    yield Client(pb_endpoint)
-
-
-@pytest.fixture()
-def client_timeout():
-    yield Client(pb_endpoint, timeout=0.001)
-
-
-def test_timeout(client_timeout):
-    client = client_timeout
-
-    with pytest.raises(httpx.ConnectTimeout):
-        client.auth_with_password(pb_id, pb_pw)
-
-    with pytest.raises(httpx.ConnectTimeout):
-        client.collection("artist").get_many({})
-
-
-def test_auth_with_password(client):
-    with pytest.raises(ResponseError):
-        client.auth_with_password(pb_id, "123")
-
+    client = Client(ENDPOINT, timeout=5.0)
     assert client.authenticated is False
-
-    client.auth_with_password(pb_id, pb_pw)
+    client.auth_with_password(EMAIL, PASSWORD, coll_name="_superusers")
     assert client.authenticated is True
+    yield client
 
 
-@pytest.mark.skip(reason="do not know how to login as admin yet")
-def test_auth_as_admin(client):
-    email = os.getenv("PB_ADMIN_EMAIL")
-    pw = os.getenv("PB_ADMIN_PW")
+def test_not_authenticated():
+    client = Client(ENDPOINT, timeout=5.0)
 
-    with pytest.raises(ResponseError):
-        client.auth_as_admin(email, "123")
+    with pytest.raises(ValueError):
+        client.auth_refresh()
 
-    assert client.authenticated is False
+    coll = client.collection("messages")
 
-    client.auth_as_admin(email, pw)
-    assert client.authenticated is True
+    with pytest.raises(NotFound):
+        coll.get("srmAo0hLxEqYF7F")
+
+    assert coll.get_one({}) is None
+
+    assert len(coll.get_items({})) == 0
+
+
+def test_timeout(client):
+    items = client.collection("messages").get_items({})
+    assert len(items) > 0
+
+    client.timeout = 0.01
+    with pytest.raises(httpx.TimeoutException):
+        client.collection("messages").get_many({})
+
+
+def test_auth_refresh(client):
+    refreshed_at = client.refreshed_at
+
+    client.auth_refresh()
+    assert client.refreshed_at > refreshed_at
 
 
 def test_get(client):
+    coll = client.collection("messages")
+
+    item = coll.get("srmAo0hLxEqYF7F")
+    assert item["id"] == "srmAo0hLxEqYF7F"
+
     with pytest.raises(NotFound):
-        client.collection("artist").get("lxdlvytspput52w")
-
-    client.auth_with_password(pb_id, pb_pw)
-    result = client.collection("artist").get("lxdlvytspput52w")
-    assert result["id"] == "lxdlvytspput52w"
-    assert "name" in result
-
-    result = client.collection("artist").get("lxdlvytspput52w", {"fields": "id"})
-    assert result["id"] == "lxdlvytspput52w"
-    assert "name" not in result
-
-
-def test_get_many(client):
-    result = client.collection("album").get_many({})
-    assert not result.get("items")
-    assert result["totalItems"] == -1
-
-    client.auth_with_password(pb_id, pb_pw)
-    result = client.collection("album").get_many({})
-    assert result.get("items")
-    assert result["totalItems"] == -1
-
-    result = client.collection("album").get_many({"skipTotal": 0})
-    assert result.get("items")
-    assert result["totalItems"] > 0
-
-
-def test_get_items(client):
-    result = client.collection("album").get_items({})
-    assert result == []
-
-    client.auth_with_password(pb_id, pb_pw)
-    result = client.collection("album").get_items({})
-    assert isinstance(result, list)
-    assert len(result) > 0
+        coll.get("wrong-id")
 
 
 def test_get_one(client):
-    assert client.collection("album").get_one({}) is None
+    coll = client.collection("messages")
 
-    client.auth_with_password(pb_id, pb_pw)
-    result = client.collection("album").get_one(
+    item = coll.get_one(
         {
-            "fields": "id,title",
-            "filter": "title = 'Play'",
+            "fields": "id,message",
+            "filter": "message = 'Hello world'",
         }
     )
-    assert isinstance(result, dict)
-    assert sorted(result.keys()) == ["id", "title"]
-    assert result["title"] == "Play"
+    assert item is not None
+    assert item["message"] == "Hello world"
+
+    assert coll.get_one({"filter": "message = 'this is fake'"}) is None
 
 
-def test_create_and_delete(client):
-    with pytest.raises(ResponseError):
-        client.collection("artist").create({"name": "Bowie"})
+def test_get_many(client):
+    coll = client.collection("messages")
 
-    with pytest.raises(NotFound):
-        client.collection("artist").delete("iezz48z1g6jaaqv")
+    resp = coll.get_many({"perPage": 2})
+    assert len(resp["items"]) == 2
+    assert resp["totalItems"] == -1
+    assert resp["totalItems"] == -1
 
-    client.auth_with_password(pb_id, pb_pw)
-    result = client.collection("artist").create({"name": "Bowie"})
-    assert result.get("id")
-    assert result["name"] == "Bowie"
-    assert client.collection("artist").delete(result["id"]) == {}
+    resp = coll.get_many({"perPage": 2, "skipTotal": False})
+    assert len(resp["items"]) == 2
+    assert resp["totalItems"] > 0
+    assert resp["totalItems"] > 0
 
-
-def test_create_not_unique(client):
-    assert client.authenticated is False
-    # This is a problem: it should return the details about uniqueness if not authenticated
-    with pytest.raises(ValidationNotUnique):
-        client.collection("album").create({"title": "Play"})
-
-    client.auth_with_password(pb_id, pb_pw)
-
-    assert client.collection("album").create_or_ignore({"title": "Play"}) is None
-
-    title = "Play"
-    score = random.randint(1, 100)
-    result = client.collection("album").create_or_update(
-        {"title": title, "score": score},
-        f"title = '{title}'",
-    )
-    assert result["title"] == title
-    assert result["score"] == score
+    resp = coll.get_many({"perPage": 2, "filter": "message = 'Hello world'"})
+    assert len(resp["items"]) == 1
+    assert resp["items"][0]["message"] == "Hello world"
 
 
-def test_update(client):
-    with pytest.raises(NotFound):
-        client.collection("artist").update("vkvpmbf989iyjkj", {"name": "Bowie2"})
+def test_get_items(client):
+    coll = client.collection("messages")
 
-    client.auth_with_password(pb_id, pb_pw)
-    name = f"Bowie-{random.randint(1, 9999)}"
-    result = client.collection("artist").update("vkvpmbf989iyjkj", {"name": name})
-    assert result["name"] == name
+    items = coll.get_items({"perPage": 2})
+    assert len(items) == 2
+
+
+def test_create(client):
+    coll = client.collection("messages")
+
+    msg = f"Fake message - {random.random()}"
+    item = coll.get_one({"filter": f"message = '{msg}'"})
+    assert item is None
+
+    result = coll.create({"message": msg, "author": "eP2jCr1h3NGtsbz"})
+    assert result["message"] == msg
+    assert coll.get_one({"filter": f"message = '{msg}'"}) is not None
